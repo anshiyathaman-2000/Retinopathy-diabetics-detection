@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Interactive Diagnosis and Illumination Preprocessing Explorer for CNN-Transformer-LSTM Retinal Disease Diagnosis Network">
+    <title>RetiHybrid-CTL - Ophthalmic Diagnosis App</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+    <header>
+        <div class="header-container">
+            <div class="logo-section">
+                <h1>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M2 12c-1.5 2 2.5 6 5.5 6s7-4 7-6-4-6-7-6-7 4-5.5 6z"/><circle cx="7.5" cy="12" r="3"/><path d="M11.5 8.5a6.5 6.5 0 0 1 10.5 3.5c1.5 2-2.5 6-5.5 6s-7-4-7-6"/></svg>
+                    RetiHybrid-CTL 
+                    <span class="badge">Hybrid AI Engine</span>
+                </h1>
+                <p>Ophthalmic Multi-Label Retinal Disease Diagnosis & Preprocessing Platform</p>
+            </div>
+            <div class="logo-section" style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem;">
+                <span class="badge" style="background-color: rgba(168, 85, 247, 0.08); color: var(--accent-purple); border-color: rgba(168, 85, 247, 0.2);">CNN-Transformer-LSTM</span>
+                <p style="font-size: 0.75rem; color: var(--text-secondary); margin: 0;">Platform: Apple Silicon (MPS Acceleration)</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        
+        <!-- Navigation Tabs -->
+        <div class="tabs-nav">
+            <button class="tab-btn active" onclick="switchTab('inference')">
+                Interactive Diagnosis
+            </button>
+            <button class="tab-btn" onclick="switchTab('dashboard')">
+                Model Statistics
+            </button>
+            <button class="tab-btn" onclick="switchTab('preprocessing')">
+                Preprocessing Modules
+            </button>
+            <button class="tab-btn" onclick="switchTab('paper')">
+                Implementation Paper
+            </button>
+        </div>
+
+        <!-- Tab 1: Interactive Inference App -->
+        <div id="inference" class="tab-content active">
+            <div class="app-grid">
+                
+                <!-- Sidebar Controls -->
+                <aside class="control-sidebar">
+                    
+                    <!-- File Upload Panel -->
+                    <div class="panel" style="padding: 1.25rem;">
+                        <h3 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--text-primary); font-weight: 700;">Input Fundus Image</h3>
+                        
+                        <div class="upload-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            <div class="upload-label">Drag & Drop or <span>Browse</span></div>
+                            <div class="upload-sub">Supports PNG, JPG, JPEG</div>
+                        </div>
+                        <input type="file" id="file-input" class="file-input" accept="image/*" onchange="handleFileSelect(event)">
+                        
+                        <!-- Preview Box -->
+                        <div id="preview-container" style="display: none; margin-top: 1rem;">
+                            <div class="image-preview-card">
+                                <img id="uploaded-preview" src="#" alt="Uploaded Fundus Image Preview">
+                                <button class="remove-img-btn" onclick="removeSelectedFile()" title="Remove image">×</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Examples Selector Panel -->
+                    <div class="panel" style="padding: 1.25rem;">
+                        <h3 style="font-size: 0.95rem; margin-bottom: 0.5rem; color: var(--text-primary); font-weight: 700;">RFMiD Validation Samples</h3>
+                        <input type="text" class="examples-search" id="example-search" placeholder="Filter by active disease..." onkeyup="filterExamples()">
+                        
+                        <div class="examples-scroll-container" id="examples-list" style="margin-top: 0.75rem;">
+                            <!-- Dynamically loaded example rows -->
+                            <p style="text-align: center; font-size: 0.8rem; color: var(--text-muted); padding: 1rem;">Loading validation cases...</p>
+                        </div>
+
+                        <!-- Ground Truth Box -->
+                        <div class="ground-truth-sidebar-box" id="gt-sidebar-box" style="display: none;">
+                            <h4 style="font-size: 0.75rem; text-transform: uppercase; color: var(--warning); margin-bottom: 0.5rem; font-weight: 700; letter-spacing: 0.5px;">Ground Truth Diagnoses</h4>
+                            <div class="example-tags" id="gt-diseases-tags">
+                                <!-- Tags list -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Trigger -->
+                    <button class="action-btn" id="analyze-btn" disabled onclick="runInference()">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                        Analyze Retinal Image
+                    </button>
+                    
+                </aside>
+
+                <!-- Workspace Results -->
+                <main class="output-workspace">
+                    
+                    <!-- Loading View -->
+                    <div class="panel" id="loading-panel" style="display: none; padding: 4rem 2rem; text-align: center;">
+                        <div style="width: 50px; height: 50px; border: 4px solid rgba(0, 242, 254, 0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1.5rem auto;"></div>
+                        <h3 style="color: var(--primary); font-size: 1.2rem; font-weight: 700;">Running Ophthalmic Pipeline</h3>
+                        <p style="color: var(--text-secondary); max-width: 450px; margin: 0.5rem auto 0 auto; font-size: 0.9rem;">
+                            Applying Contrast Limited Adaptive Histogram Equalization (CLAHE) on LAB space, filtering illumination gradients with Multi-Scale Retinex (MSR), and executing the CNN-Transformer-LSTM multi-label model...
+                        </p>
+                    </div>
+
+                    <!-- Welcome Screen -->
+                    <div class="panel" id="welcome-panel" style="padding: 4rem 2rem; text-align: center;">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary); margin-bottom: 1.5rem;"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                        <h2 style="font-size: 1.5rem; font-weight: 800; margin-bottom: 0.75rem;">Interactive Ophthalmic Analyzer</h2>
+                        <p style="color: var(--text-secondary); max-width: 500px; margin: 0 auto; font-size: 0.95rem;">
+                            To begin, select a sample fundus image from the validation set on the left sidebar, or upload a custom fundus photograph. The system will visualize the illumination correction steps and predict up to 45 separate retinal conditions.
+                        </p>
+                    </div>
+
+                    <!-- Diagnosis Workspace -->
+                    <div id="results-panel" style="display: none; display: flex; flex-direction: column; gap: 2rem;">
+                        
+                        <!-- Section: Preprocessing Step Comparison -->
+                        <section class="panel">
+                            <h2 class="card-title">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                                Illumination-Conscious Preprocessing Progression
+                            </h2>
+                            
+                            <div class="comparison-grid">
+                                <!-- Step 1: Original -->
+                                <div class="step-img-card">
+                                    <div class="step-header">Step 1 <span>Original BGR</span></div>
+                                    <div class="step-body" onclick="zoomImage(this)">
+                                        <img id="step-img-original" src="#" alt="Original fundus image resized">
+                                    </div>
+                                    <div class="step-desc-bar">Standardized to 256x256 pixel grid</div>
+                                </div>
+                                <!-- Step 2: CLAHE -->
+                                <div class="step-img-card">
+                                    <div class="step-header">Step 2 <span>LAB CLAHE</span></div>
+                                    <div class="step-body" onclick="zoomImage(this)">
+                                        <img id="step-img-clahe" src="#" alt="CLAHE enhanced fundus image">
+                                    </div>
+                                    <div class="step-desc-bar">Local contrast optimized on L-channel</div>
+                                </div>
+                                <!-- Step 3: MSR -->
+                                <div class="step-img-card">
+                                    <div class="step-header">Step 3 <span>MSR Normalization</span></div>
+                                    <div class="step-body" onclick="zoomImage(this)">
+                                        <img id="step-img-msr" src="#" alt="Multi Scale Retinex normalized image">
+                                    </div>
+                                    <div class="step-desc-bar">Sigmas [5,15,30] lighting gradient removal</div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- Section: AI Predictions -->
+                        <div class="prediction-results-grid">
+                            
+
+
+                            <!-- List of individual predictions -->
+                            <div class="panel predictions-list-panel">
+                                <h2 class="card-title" style="margin-bottom: 0.75rem; border-bottom: none; padding-bottom: 0;">
+                                    Ocular Pathology Predictions
+                                </h2>
+                                <input type="text" class="predictions-search-bar" id="pred-search" placeholder="Search predicted pathologies..." onkeyup="filterPredictions()">
+                                
+                                <!-- Overall Diagnosis Risk Banner -->
+                                <div id="overall-risk-banner" style="background: rgba(255, 255, 255, 0.015); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin: 1rem 0; display: flex; align-items: center; justify-content: space-between; transition: all 0.3s ease;">
+                                    <div>
+                                        <h3 style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); letter-spacing: 0.5px; font-weight: 700; margin-bottom: 0.25rem;">Overall Diagnosis Risk</h3>
+                                        <div id="overall-risk-status" style="font-size: 1.1rem; font-weight: 800; color: var(--primary);">Ready for diagnosis</div>
+                                    </div>
+                                    <div style="font-size: 1.8rem; font-weight: 800; color: var(--primary); font-family: 'JetBrains Mono', monospace;" id="overall-risk-pct">0.0%</div>
+                                </div>
+
+                                <div class="predictions-list-scroll" id="pred-list-container">
+                                    <!-- Dynamic rows from prediction output -->
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <!-- Section: Clinical Precautions & Next Steps -->
+                        <div class="panel precautions-panel" id="precautions-panel" style="display: none;">
+                            <h2 class="card-title" style="color: var(--warning); border-bottom: 1px solid rgba(245, 158, 11, 0.15); padding-bottom: 0.75rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1.25rem;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--warning);"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                Recommended Clinical Precautions & Next Steps
+                            </h2>
+                            <div id="precautions-container" class="precautions-container">
+                                <!-- Dynamic precautions listed based on positive predictions -->
+                            </div>
+                        </div>
+
+                    </div>
+
+                </main>
+            </div>
+        </div>
+
+        <!-- Tab 2: Performance Stats & Dashboard -->
+        <div id="dashboard" class="tab-content">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Hamming Loss</div>
+                    <div class="stat-value" id="stat-hl" style="color: var(--primary);">0.02802</div>
+                    <div class="stat-desc">Multi-label classification error rate</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Mean Accuracy</div>
+                    <div class="stat-value" id="stat-acc" style="color: var(--success);">94.44%</div>
+                    <div class="stat-desc" id="stat-acc-desc">Average across diagnostic labels</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label" id="stat-auc-label">Mean AUC-ROC</div>
+                    <div class="stat-value" id="stat-auc" style="color: var(--accent-purple);">0.9803</div>
+                    <div class="stat-desc">Receiver operating characteristic area</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-label">Mean Specificity</div>
+                    <div class="stat-value" id="stat-spec">97.83%</div>
+                    <div class="stat-desc">Average true negative screening rate</div>
+                </div>
+            </div>
+
+            <!-- Performance Metrics Visualizer Dials Grid -->
+            <div class="panel" style="margin-bottom: 2rem;">
+                <h2 class="card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
+                    Performance Metrics Visualizer
+                </h2>
+                <div class="dials-grid">
+                    <!-- Dial 1: Accuracy -->
+                    <div class="dial-card" style="--glow-color: rgba(16, 185, 129, 0.35);">
+                        <div class="dial-circle-wrapper">
+                            <svg class="dial-svg" width="100" height="100" viewBox="0 0 100 100">
+                                <defs>
+                                    <linearGradient id="accGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#10b981" />
+                                        <stop offset="100%" stop-color="#34d399" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="dial-bg" cx="50" cy="50" r="40"></circle>
+                                <circle id="dial-acc" class="dial-fill" cx="50" cy="50" r="40" style="stroke: url(#accGrad);"></circle>
+                            </svg>
+                            <div class="dial-value" id="dial-acc-text">0.0%</div>
+                        </div>
+                        <div class="dial-label">Mean Accuracy</div>
+                    </div>
+                    <!-- Dial 2: F1-Macro -->
+                    <div class="dial-card" style="--glow-color: rgba(0, 242, 254, 0.35);">
+                        <div class="dial-circle-wrapper">
+                            <svg class="dial-svg" width="100" height="100" viewBox="0 0 100 100">
+                                <defs>
+                                    <linearGradient id="f1Grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#00f2fe" />
+                                        <stop offset="100%" stop-color="#4facfe" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="dial-bg" cx="50" cy="50" r="40"></circle>
+                                <circle id="dial-f1" class="dial-fill" cx="50" cy="50" r="40" style="stroke: url(#f1Grad);"></circle>
+                            </svg>
+                            <div class="dial-value" id="dial-f1-text">0.0%</div>
+                        </div>
+                        <div class="dial-label">F1-Macro</div>
+                    </div>
+                    <!-- Dial 3: Sensitivity -->
+                    <div class="dial-card" style="--glow-color: rgba(245, 158, 11, 0.35);">
+                        <div class="dial-circle-wrapper">
+                            <svg class="dial-svg" width="100" height="100" viewBox="0 0 100 100">
+                                <defs>
+                                    <linearGradient id="sensGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#f59e0b" />
+                                        <stop offset="100%" stop-color="#fbbf24" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="dial-bg" cx="50" cy="50" r="40"></circle>
+                                <circle id="dial-sens" class="dial-fill" cx="50" cy="50" r="40" style="stroke: url(#sensGrad);"></circle>
+                            </svg>
+                            <div class="dial-value" id="dial-sens-text">0.0%</div>
+                        </div>
+                        <div class="dial-label">Mean Sensitivity</div>
+                    </div>
+                    <!-- Dial 4: Specificity -->
+                    <div class="dial-card" style="--glow-color: rgba(168, 85, 247, 0.35);">
+                        <div class="dial-circle-wrapper">
+                            <svg class="dial-svg" width="100" height="100" viewBox="0 0 100 100">
+                                <defs>
+                                    <linearGradient id="specGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#a855f7" />
+                                        <stop offset="100%" stop-color="#c084fc" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="dial-bg" cx="50" cy="50" r="40"></circle>
+                                <circle id="dial-spec" class="dial-fill" cx="50" cy="50" r="40" style="stroke: url(#specGrad);"></circle>
+                            </svg>
+                            <div class="dial-value" id="dial-spec-text">0.0%</div>
+                        </div>
+                        <div class="dial-label">Mean Specificity</div>
+                    </div>
+                    <!-- Dial 5: AUC-ROC -->
+                    <div class="dial-card" style="--glow-color: rgba(255, 123, 0, 0.35);">
+                        <div class="dial-circle-wrapper">
+                            <svg class="dial-svg" width="100" height="100" viewBox="0 0 100 100">
+                                <defs>
+                                    <linearGradient id="aucGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#ff7b00" />
+                                        <stop offset="100%" stop-color="#ffb700" />
+                                    </linearGradient>
+                                </defs>
+                                <circle class="dial-bg" cx="50" cy="50" r="40"></circle>
+                                <circle id="dial-auc" class="dial-fill" cx="50" cy="50" r="40" style="stroke: url(#aucGrad);"></circle>
+                            </svg>
+                            <div class="dial-value" id="dial-auc-text">0.0%</div>
+                        </div>
+                        <div class="dial-label">Mean AUC-ROC</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-layout">
+
+                <div class="panel">
+                    <h2 class="card-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary);"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>
+                        Model Evaluation Visualizations
+                    </h2>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem; margin-top: 1rem;">
+                        <div>
+                            <h4 style="font-size: 0.82rem; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.75px;">Loss Convergence History</h4>
+                            <div style="border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; padding: 0.5rem; background: rgba(0,0,0,0.15);">
+                                <img src="/static/loss_plot.png" alt="Training and Validation Loss Curve" style="width: 100%; height: auto; display: block;" onerror="this.onerror=null; this.src='https://placehold.co/800x400/0d1222/00f2fe?text=Loss+Plot+Not+Found'">
+                            </div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 0.82rem; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.75px;">Confusion Matrix</h4>
+                            <div style="border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; padding: 0.5rem; background: rgba(0,0,0,0.15);">
+                                <img src="/static/confusion_matrix.png" alt="Confusion Matrix" style="width: 100%; height: auto; display: block;" onerror="this.onerror=null; this.src='https://placehold.co/800x400/0d1222/00f2fe?text=Confusion+Matrix+Not+Found'">
+                            </div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                        <p>Training converges within <strong>3 epochs</strong>. The validation loss tracks the training path closely down to <strong>0.1769</strong>, verifying that freezing layers in the ResNet50 backbone prevents overfitting on the limited validation set.</p>
+                    </div>
+                </div>
+
+                <div class="panel" style="display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <h2 class="card-title">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></svg>
+                            Hybrid Model Specifications
+                        </h2>
+                        <div style="color: var(--text-secondary); font-size: 0.9rem; display: grid; gap: 0.75rem;">
+                            <p><strong>Backbone Network:</strong> Pre-trained ResNet50. Frozen Conv1 through Layer2; Layer3 and Layer4 are fine-tuned.</p>
+                            <p><strong>1x1 Conv Projector:</strong> Projects 2048 ResNet features down to a 256-dimension representation.</p>
+                            <p><strong>Transformer Encoder:</strong> 2-Layer multi-head attention network modelling spatial correlation across 64 patch tokens.</p>
+                            <p><strong>Recurrent Sequence Model:</strong> Bidirectional LSTM layer for spatial sequence progression.</p>
+                            <p><strong>Classification Header:</strong> Linear layer mapped through Binary Cross-Entropy.</p>
+                        </div>
+                    </div>
+                    
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 1rem; margin-top: 1rem;">
+                        <h3 style="font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-primary);">Execution Log Output</h3>
+                        <pre style="background-color: #03050a; padding: 0.75rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; border: 1px solid var(--border-color); overflow-x: auto; color: var(--primary);">
+Using Apple Silicon GPU acceleration (MPS)
+Loading archive 2 Diabetic Retinopathy dataset from /Users/apple/Library/Mobile Documents/com~apple~CloudDocs/paper/archive 2/retino
+Epoch 01/03 | Train Loss: 0.4213 | Val Loss: 0.2403 | Val F1-Macro: 0.9164 | Val F1-Micro: 0.9164 | Hamming Loss: 0.0782 | Time: 348.5s
+Epoch 02/03 | Train Loss: 0.2934 | Val Loss: 0.2240 | Val F1-Macro: 0.9025 | Val F1-Micro: 0.9025 | Hamming Loss: 0.0932 | Time: 209.4s
+Epoch 03/03 | Train Loss: 0.2354 | Val Loss: 0.1769 | Val F1-Macro: 0.9397 | Val F1-Micro: 0.9397 | Hamming Loss: 0.0556 | Time: 221.0s
+Training Complete! Best Val F1-Macro: 0.9397
+                        </pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Results Table -->
+            <div class="panel">
+                <h2 class="card-title">Detailed Per-Class Performance Dashboard</h2>
+                
+                <div class="results-controls">
+                    <input type="text" id="searchBar" class="search-input" placeholder="Search disease label..." onkeyup="filterTable()">
+                    <div style="font-size: 0.85rem; color: var(--text-muted);">
+                        Showing <span id="visible-count">2</span> of <span id="total-count">2</span> diagnostic labels
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table class="results-table" id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable(0)">Label Name</th>
+                                <th onclick="sortTable(1)">Accuracy</th>
+                                <th onclick="sortTable(2)">Sensitivity</th>
+                                <th onclick="sortTable(3)">Specificity</th>
+                                <th onclick="sortTable(4)">F1-Score</th>
+                                <th onclick="sortTable(5)">AUC-ROC</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body">
+                            <tr>
+                                <td colspan="6" style="text-align: center; padding: 2rem;">Loading and parsing evaluation results...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: Preprocessing Description -->
+        <div id="preprocessing" class="tab-content">
+            <div class="panel" style="margin-bottom: 2rem;">
+                <h2 class="card-title" style="color: var(--primary);">Illumination-Conscious Preprocessing Pipeline</h2>
+                <div style="color: var(--text-secondary); font-size: 0.95rem; display: grid; gap: 1.5rem;">
+                    <p>Clinical eye fundus imaging frequently suffers from poor lighting, camera blur, and varying contrast. To normalize these inputs before feature learning, we implement an explicit two-stage image enhancement pipeline:</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                        <div style="background-color: rgba(255,255,255,0.005); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 12px;">
+                            <h3 style="color: var(--primary); font-size: 1.1rem; margin-bottom: 0.5rem;">1. L-Channel CLAHE</h3>
+                            <p style="font-size: 0.85rem; text-align: justify; color: var(--text-secondary);">
+                                Contrast Limited Adaptive Histogram Equalization splits the image into the <strong>LAB color space</strong> (Lightness, A-color, B-color) and applies contrast optimization solely to the Lightness channel. This highlights critical diagnostic indicators (e.g. microaneurysms, exudates, and hemorrhage patches) without distorting natural hue details.
+                            </p>
+                            <div style="margin-top: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-purple);">
+                                ClipLimit: 2.0 | TileGridSize: 8x8
+                            </div>
+                        </div>
+                        <div style="background-color: rgba(255,255,255,0.005); border: 1px solid var(--border-color); padding: 1.5rem; border-radius: 12px;">
+                            <h3 style="color: var(--primary); font-size: 1.1rem; margin-bottom: 0.5rem;">2. Multi-Scale Retinex (MSR)</h3>
+                            <p style="font-size: 0.85rem; text-align: justify; color: var(--text-secondary);">
+                                Retinex theory parses color images by extracting localized reflectance features from the illumination gradient. Our Multi-Scale Retinex averages logarithmic differences of Gaussian-blurred representations across multiple kernel widths, neutralizing shadows and lighting imbalances across the curved retina.
+                            </p>
+                            <div style="margin-top: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; color: var(--accent-purple);">
+                                Scales: [5, 15, 30] | Weight: Average
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel">
+                <h2 class="card-title">RFMiD Challenge Dataset Context</h2>
+                <div style="color: var(--text-secondary); font-size: 0.95rem;">
+                    <p>The <strong>Retinal Fundus Multi-Disease Image Dataset (RFMiD)</strong> is annotated for a large number of diseases, making it a critical benchmark for multi-label deep learning. In this project, we evaluate on the validation subset consisting of <strong>128 samples</strong> (split from the 640 challenge validation set), grading them against <strong>45 categories</strong> and 1 global disease risk class.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 4: Implementation Paper -->
+        <div id="paper" class="tab-content">
+            <div class="dashboard-layout" style="grid-template-columns: 2fr 1fr; align-items: start;">
+                
+                <!-- Markdown content -->
+                <div class="panel" style="padding: 0;">
+                    <div id="paper-content" class="paper-markdown">
+                        <p style="text-align: center; padding: 2rem; color: var(--text-secondary);">Loading implementation paper markdown...</p>
+                    </div>
+                </div>
+                
+                <!-- Architecture panel -->
+                <div class="panel sticky-sidebar">
+                    <h2 class="card-title" style="color: var(--primary);">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Network Architecture
+                    </h2>
+                    <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1.5rem;">
+                        The model combines convolutional feature extraction, long-range global transformer attention, and sequential spatial recurrence.
+                    </p>
+                    
+                    <div class="arch-diagram-flow">
+                        <div class="arch-node">
+                            <div class="arch-node-number">01</div>
+                            <div class="arch-node-content">
+                                <h3>Input Preprocessing</h3>
+                                <p>LAB CLAHE + Multi-Scale Retinex, resized to 256x256x3</p>
+                            </div>
+                        </div>
+                        <div class="arch-node">
+                            <div class="arch-node-number">02</div>
+                            <div class="arch-node-content">
+                                <h3>CNN Feature Extractor</h3>
+                                <p>ResNet50 backbone (Layer 4 output: 8x8x2048)</p>
+                            </div>
+                        </div>
+                        <div class="arch-node">
+                            <div class="arch-node-number">03</div>
+                            <div class="arch-node-content">
+                                <h3>Linear Projector</h3>
+                                <p>1x1 Conv projecting channels from 2048 down to D=256</p>
+                            </div>
+                        </div>
+                        <div class="arch-node">
+                            <div class="arch-node-number">04</div>
+                            <div class="arch-node-content">
+                                <h3>Transformer Encoder</h3>
+                                <p>2 layers, 4 attention heads capturing global correlations</p>
+                            </div>
+                        </div>
+                        <div class="arch-node">
+                            <div class="arch-node-number">05</div>
+                            <div class="arch-node-content">
+                                <h3>Bidirectional LSTM</h3>
+                                <p>1 layer sequence modelling over 64 spatial embeddings</p>
+                            </div>
+                        </div>
+                        <div class="arch-node">
+                            <div class="arch-node-number">06</div>
+                            <div class="arch-node-content">
+                                <h3>Pooling & Classification</h3>
+                                <p>Global Average Pooling followed by BCE Sigmoid output</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Zoom overlay modal -->
+    <div id="zoom-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.9); z-index: 1000; align-items: center; justify-content: center; cursor: zoom-out;" onclick="this.style.display = 'none'">
+        <img id="zoom-modal-img" src="#" alt="Zoomed view" style="max-width: 90%; max-height: 90%; object-fit: contain; border-radius: 8px; border: 1px solid var(--border-color);">
+    </div>
+
+    <script>
+        // Global State variables
+        let validationExamples = [];
+        let selectedImageId = null;
+        let selectedFile = null;
+        let predictionResults = [];
+
+        // Tab switching logic
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            document.getElementById(tabId).classList.add('active');
+            
+            // Activate button styling
+            const buttons = document.querySelectorAll('.tab-btn');
+            if (tabId === 'inference') buttons[0].classList.add('active');
+            else if (tabId === 'dashboard') {
+                buttons[1].classList.add('active');
+                fetchStats();
+            }
+            else if (tabId === 'preprocessing') buttons[2].classList.add('active');
+            else if (tabId === 'paper') buttons[3].classList.add('active');
+        }
+
+
+        // Zoom image helper
+        function zoomImage(element) {
+            const img = element.querySelector('img');
+            if (img && img.src && img.src !== window.location.href + '#') {
+                const modal = document.getElementById('zoom-modal');
+                const modalImg = document.getElementById('zoom-modal-img');
+                modalImg.src = img.src;
+                modal.style.display = 'flex';
+            }
+        }
+
+        // Initialize drag & drop uploader
+        const dropZone = document.getElementById('drop-zone');
+        
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, e => {
+                e.preventDefault();
+                dropZone.style.borderColor = 'var(--primary)';
+                dropZone.style.backgroundColor = 'rgba(0, 242, 254, 0.04)';
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, e => {
+                e.preventDefault();
+                dropZone.style.borderColor = 'var(--border-color)';
+                dropZone.style.backgroundColor = 'rgba(255, 255, 255, 0.01)';
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', e => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        function handleFileSelect(event) {
+            const files = event.target.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        }
+
+        function handleFile(file) {
+            selectedFile = file;
+            selectedImageId = null;
+
+            // Update preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('uploaded-preview').src = e.target.result;
+                document.getElementById('preview-container').style.display = 'block';
+                dropZone.style.display = 'none';
+            }
+            reader.readAsDataURL(file);
+
+            // Deactivate active card selection
+            document.querySelectorAll('.example-item-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            document.getElementById('gt-sidebar-box').style.display = 'none';
+            document.getElementById('analyze-btn').removeAttribute('disabled');
+        }
+
+        function removeSelectedFile() {
+            selectedFile = null;
+            document.getElementById('file-input').value = '';
+            document.getElementById('preview-container').style.display = 'none';
+            dropZone.style.display = 'flex';
+            
+            if (selectedImageId === null) {
+                document.getElementById('analyze-btn').setAttribute('disabled', 'true');
+            }
+        }
+
+        // Select an example from list
+        function selectExample(id) {
+            selectedImageId = id;
+            selectedFile = null;
+            
+            // Remove upload previews
+            removeSelectedFile();
+
+            // Set active card selection style
+            document.querySelectorAll('.example-item-card').forEach(card => {
+                card.classList.remove('active');
+            });
+            const activeCard = document.getElementById(`example-card-${id}`);
+            if (activeCard) {
+                activeCard.classList.add('active');
+            }
+
+            // Display ground truth info in sidebar
+            const example = validationExamples.find(x => x.id === id);
+            if (example) {
+                const gtBox = document.getElementById('gt-sidebar-box');
+                const gtTags = document.getElementById('gt-diseases-tags');
+                gtTags.innerHTML = '';
+                
+                if (example.disease_risk === 1) {
+                    const tagRisk = document.createElement('span');
+                    tagRisk.className = 'tag tag-risk';
+                    tagRisk.textContent = 'Risk Present';
+                    gtTags.appendChild(tagRisk);
+                }
+
+                example.active_diseases.forEach(d => {
+                    const tag = document.createElement('span');
+                    tag.className = 'tag';
+                    tag.textContent = d;
+                    gtTags.appendChild(tag);
+                });
+
+                if (example.active_diseases.length === 0) {
+                    const tagNormal = document.createElement('span');
+                    tagNormal.className = 'tag';
+                    tagNormal.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
+                    tagNormal.style.color = 'var(--success)';
+                    tagNormal.textContent = 'Normal Fundus';
+                    gtTags.appendChild(tagNormal);
+                }
+
+                gtBox.style.display = 'block';
+            }
+
+            document.getElementById('analyze-btn').removeAttribute('disabled');
+        }
+
+        // Load Examples from API
+        async function loadExamples() {
+            try {
+                const response = await fetch('/api/examples');
+                if (!response.ok) throw new Error('Failed to load examples');
+                validationExamples = await response.json();
+                
+                renderExamplesList(validationExamples);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('examples-list').innerHTML = 
+                    `<p style="text-align: center; font-size: 0.8rem; color: var(--danger); padding: 1rem;">Failed to load validation set.</p>`;
+            }
+        }
+
+        // Render examples scroll area
+        function renderExamplesList(items) {
+            const container = document.getElementById('examples-list');
+            container.innerHTML = '';
+            
+            if (items.length === 0) {
+                container.innerHTML = `<p style="text-align: center; font-size: 0.8rem; color: var(--text-muted); padding: 1rem;">No validation images found.</p>`;
+                return;
+            }
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'example-item-card';
+                card.id = `example-card-${item.id}`;
+                card.onclick = () => selectExample(item.id);
+                
+                const thumb = document.createElement('div');
+                thumb.className = 'example-thumb';
+                const img = document.createElement('img');
+                img.src = item.url;
+                img.alt = `Example ${item.id}`;
+                thumb.appendChild(img);
+                card.appendChild(thumb);
+                
+                const details = document.createElement('div');
+                details.className = 'example-details';
+                const title = document.createElement('div');
+                title.className = 'example-title';
+                title.textContent = `Image #${item.id}`;
+                details.appendChild(title);
+                
+                const tags = document.createElement('div');
+                tags.className = 'example-tags';
+                
+                if (item.disease_risk === 1) {
+                    const tagRisk = document.createElement('span');
+                    tagRisk.className = 'tag tag-risk';
+                    tagRisk.textContent = 'Risk';
+                    tags.appendChild(tagRisk);
+                }
+                
+                // Add first 3 active conditions, or "Normal"
+                if (item.active_diseases.length > 0) {
+                    item.active_diseases.slice(0, 3).forEach(d => {
+                        const t = document.createElement('span');
+                        t.className = 'tag';
+                        t.textContent = d;
+                        tags.appendChild(t);
+                    });
+                    if (item.active_diseases.length > 3) {
+                        const more = document.createElement('span');
+                        more.className = 'tag';
+                        more.textContent = `+${item.active_diseases.length - 3}`;
+                        tags.appendChild(more);
+                    }
+                } else {
+                    const normal = document.createElement('span');
+                    normal.className = 'tag';
+                    normal.style.color = 'var(--success)';
+                    normal.textContent = 'Normal';
+                    tags.appendChild(normal);
+                }
+                
+                details.appendChild(tags);
+                card.appendChild(details);
+                container.appendChild(card);
+            });
+        }
+
+        // Filter example cards by search key
+        function filterExamples() {
+            const query = document.getElementById('example-search').value.toLowerCase();
+            if (!query) {
+                renderExamplesList(validationExamples);
+                return;
+            }
+
+            const filtered = validationExamples.filter(item => {
+                const matchesId = item.id.toString().includes(query);
+                const matchesDisease = item.active_diseases.some(d => d.toLowerCase().includes(query));
+                return matchesId || matchesDisease;
+            });
+            
+            renderExamplesList(filtered);
+        }
+
+        // Run ML Preprocessing & Inference
+        async function runInference() {
+            // Panels toggling
+            document.getElementById('welcome-panel').style.display = 'none';
+            document.getElementById('results-panel').style.display = 'none';
+            document.getElementById('loading-panel').style.display = 'block';
+            document.getElementById('analyze-btn').setAttribute('disabled', 'true');
+
+            const formData = new FormData();
+            if (selectedFile) {
+                formData.append('file', selectedFile);
+            } else if (selectedImageId !== null) {
+                formData.append('image_id', selectedImageId);
+            } else {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Prediction request failed.');
+                const result = await response.json();
+                
+                displayResults(result);
+            } catch (err) {
+                console.error(err);
+                alert(`Error running diagnostic model: ${err.message}`);
+                
+                document.getElementById('loading-panel').style.display = 'none';
+                document.getElementById('welcome-panel').style.display = 'block';
+            } finally {
+                document.getElementById('analyze-btn').removeAttribute('disabled');
+            }
+        }
+
+        // Display Inference Results in workspace
+        function displayResults(data) {
+            document.getElementById('loading-panel').style.display = 'none';
+            document.getElementById('results-panel').style.display = 'flex';
+
+            // 1. Preprocessing images mapping
+            document.getElementById('step-img-original').src = data.images.original;
+            document.getElementById('step-img-clahe').src = data.images.clahe;
+            document.getElementById('step-img-msr').src = data.images.msr;
+
+            // Save predictions globally
+            predictionResults = data.predictions;
+
+            // Update Overall Diagnosis Risk Banner
+            const riskPred = predictionResults.find(x => x.label === 'Disease_Risk');
+            if (riskPred) {
+                const pct = (riskPred.probability * 100).toFixed(1);
+                document.getElementById('overall-risk-pct').textContent = `${pct}%`;
+                
+                const statusElement = document.getElementById('overall-risk-status');
+                const bannerElement = document.getElementById('overall-risk-banner');
+                const pctElement = document.getElementById('overall-risk-pct');
+                
+                if (riskPred.probability >= 0.5) {
+                    statusElement.textContent = 'Pathology Risk Detected';
+                    statusElement.style.color = 'var(--danger)';
+                    pctElement.style.color = 'var(--danger)';
+                    bannerElement.style.border = '1px solid rgba(239, 68, 68, 0.25)';
+                    bannerElement.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.06), rgba(239, 68, 68, 0.01))';
+                } else {
+                    statusElement.textContent = 'No Significant Pathology Risk';
+                    statusElement.style.color = 'var(--success)';
+                    pctElement.style.color = 'var(--success)';
+                    bannerElement.style.border = '1px solid rgba(16, 185, 129, 0.25)';
+                    bannerElement.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(16, 185, 129, 0.01))';
+                }
+            }
+
+            // 3. Render prediction items list
+            renderPredictionsList(predictionResults);
+
+            // 4. Render clinical precautions list
+            renderPrecautions(predictionResults);
+        }
+
+        // Clinical precautions recommendations mapping
+        const PRECAUTIONS_MAP = {
+            "Disease_Risk": {
+                title: "General Ocular Pathology Risk",
+                text: "A general pathology presence has been flagged. We recommend scheduling a comprehensive dilated eye examination with an optometrist or ophthalmologist for definitive diagnosis."
+            },
+            "DR": {
+                title: "Diabetic Retinopathy (DR)",
+                text: "Monitor and tightly control blood glucose levels, HbA1c, blood pressure, and cholesterol. Schedule regular yearly dilated eye exams. Consult with your endocrinologist and ophthalmologist regarding potential laser photocoagulation or anti-VEGF injection therapies."
+            },
+            "ARMD": {
+                title: "Age-Related Macular Degeneration (ARMD)",
+                text: "Protect your eyes from UV light using polarized sunglasses. Consider taking AREDS2 formula supplements (vitamin C, E, zinc, copper, lutein, zeaxanthin) after consulting your doctor. Use an Amsler grid daily to monitor for distortions in central vision and report any sudden changes immediately."
+            },
+            "MH": {
+                title: "Media Haze (MH)",
+                text: "Media haze can indicate cataracts, vitreous opacities, or corneal problems. Consult an ophthalmologist to evaluate the cause. Avoid driving in high-glare or night conditions if visual clarity is significantly reduced."
+            },
+            "DN": {
+                title: "Drusen (DN)",
+                text: "Drusen are yellow deposits under the retina that increase the risk of AMD. Schedule monitoring eye exams. Stop smoking, as it accelerates degeneration. Adopt a diet rich in leafy green vegetables, lutein, and omega-3 fatty acids."
+            },
+            "MYA": {
+                title: "Pathological Myopia (MYA)",
+                text: "High myopia increases risk of retinal tears and detachment. Avoid head-impact sports, bungee jumping, or heavy weightlifting. Seek immediate emergency care if you notice a sudden increase in floaters, flashes of light, or a dark shadow over your field of vision."
+            },
+            "BRVO": {
+                title: "Branch Retinal Vein Occlusion (BRVO)",
+                text: "Branch Retinal Vein Occlusion is highly linked to systemic cardiovascular health. Check for hypertension, diabetes, and hyperlipidemia with your primary care doctor. Follow up closely with a retinal specialist to monitor for macular edema."
+            },
+            "CRVO": {
+                title: "Central Retinal Vein Occlusion (CRVO)",
+                text: "Central Retinal Vein Occlusion is highly linked to systemic cardiovascular health. Check for hypertension, diabetes, and hyperlipidemia with your primary care doctor. Follow up closely with a retinal specialist to monitor for macular edema."
+            },
+            "TSLN": {
+                title: "Tessellation (TSLN)",
+                text: "Tessellation is a normal pigmentary variation of the retina, often associated with a myopic profile. While not a disease itself, regular annual checkups are recommended to monitor retinal thickness and check for peripheral tears."
+            },
+            "ERM": {
+                title: "Epiretinal Membrane (ERM)",
+                text: "A thin sheet of fibrous tissue over the macula can cause distorted (wavy) or blurred vision. If vision is significantly impaired, consult a vitreoretinal surgeon regarding a vitrectomy and membrane peeling procedure. Otherwise, monitor regularly."
+            },
+            "MS": {
+                title: "Macular Scar (MS)",
+                text: "A scar in the central retina may cause a permanent central blind spot. Utilize low-vision aids (magnifiers, high-contrast displays) if reading is difficult. Continue regular exams to protect the surrounding healthy retina."
+            },
+            "CSR": {
+                title: "Central Serous Chorioretinopathy (CSR)",
+                text: "Fluid accumulation under the retina, frequently triggered by stress or corticosteroid use. Avoid or discontinue use of steroid-containing medications (sprays, creams) under medical guidance. Adopt stress-reduction techniques. Most cases resolve spontaneously within 3-4 months, but close monitoring is required."
+            },
+            "ODC": {
+                title: "Optic Disc Cupping (ODC)",
+                text: "Pathology of the optic nerve, often a primary indicator of Glaucoma. Measure intraocular pressure (IOP) immediately. Strictly follow any prescribed pressure-lowering eye drops and schedule visual field testing."
+            },
+            "ODP": {
+                title: "Optic Disc Pallor (ODP)",
+                text: "Optic nerve pallor suggests loss of nerve fibers (optic atrophy). Consult a neuro-ophthalmologist for evaluation. Monitor visual acuity and visual fields regularly."
+            },
+            "ODE": {
+                title: "Optic Disc Edema (ODE)",
+                text: "Optic disc swelling (edema) requires immediate medical evaluation to rule out increased intracranial pressure or inflammatory conditions. Consult a neurologist or neuro-ophthalmologist as soon as possible."
+            },
+            "RT": {
+                title: "Retinal Tear / Detachment (RT)",
+                text: "CRITICAL: A retinal tear requires urgent, immediate evaluation by a retinal specialist. Restrict strenuous physical movements and head shaking. Laser retinopexy or cryopexy may be needed immediately to prevent full retinal detachment."
+            },
+            "RS": {
+                title: "Retinitis (RS)",
+                text: "Active retinal inflammation. Requires prompt evaluation by an ophthalmologist to determine if the cause is infectious or autoimmune. Targeted anti-inflammatory or antimicrobial treatment may be prescribed."
+            }
+        };
+
+        // Render precautions based on prediction results
+        function renderPrecautions(predictions) {
+            const container = document.getElementById('precautions-container');
+            const panel = document.getElementById('precautions-panel');
+            container.innerHTML = '';
+            
+            // Filter predictions with probability >= 0.5
+            const activePreds = predictions.filter(p => p.probability >= 0.5);
+            
+            if (activePreds.length === 0) {
+                panel.style.display = 'none';
+                return;
+            }
+            
+            panel.style.display = 'block';
+            
+            activePreds.forEach(pred => {
+                const label = pred.label;
+                const advice = PRECAUTIONS_MAP[label] || {
+                    title: `${pred.fullname} (${label})`,
+                    text: "Retinal condition flagged. Maintain regular clinical follow-ups with an ophthalmologist, protect your eyes from UV light, and report any sudden visual changes such as new floaters, flashes, or central distortion immediately."
+                };
+                
+                const item = document.createElement('div');
+                item.className = 'precaution-item';
+                
+                const title = document.createElement('div');
+                title.className = 'precaution-title';
+                
+                const abbrev = document.createElement('span');
+                abbrev.className = 'precaution-abbrev';
+                abbrev.textContent = label;
+                
+                const nameText = document.createTextNode(' ' + advice.title);
+                
+                title.appendChild(abbrev);
+                title.appendChild(nameText);
+                
+                const text = document.createElement('div');
+                text.className = 'precaution-text';
+                text.textContent = advice.text;
+                
+                item.appendChild(title);
+                item.appendChild(text);
+                container.appendChild(item);
+            });
+        }
+
+
+        // Render predictions scroll items
+        function renderPredictionsList(predictions) {
+            const listContainer = document.getElementById('pred-list-container');
+            listContainer.innerHTML = '';
+
+            predictions.forEach(pred => {
+                // We show Disease_Risk alongside other categories in list too
+                const card = document.createElement('div');
+                card.className = 'pred-row-item';
+                if (pred.probability >= 0.5) {
+                    card.className += ' positive-diagnosis';
+                }
+
+                // Metadata top line
+                const meta = document.createElement('div');
+                meta.className = 'pred-meta';
+                
+                const left = document.createElement('div');
+                left.style.display = 'flex';
+                left.style.alignItems = 'center';
+                
+                const name = document.createElement('span');
+                name.className = 'pred-label-name';
+                name.textContent = pred.fullname;
+                name.title = pred.fullname;
+                left.appendChild(name);
+                
+                const abbrev = document.createElement('span');
+                abbrev.className = 'pred-abbrev';
+                abbrev.textContent = pred.label;
+                left.appendChild(abbrev);
+                meta.appendChild(left);
+
+                // Right side: prob value + ground truth badge
+                const right = document.createElement('div');
+                right.style.display = 'flex';
+                right.style.alignItems = 'center';
+                right.style.gap = '0.5rem';
+
+                if (pred.ground_truth !== null && pred.ground_truth !== undefined) {
+                    const badge = document.createElement('span');
+                    
+                    const isPositive = pred.prediction === 1;
+                    const isGTPositive = pred.ground_truth === 1;
+                    
+                    if (isPositive === isGTPositive) {
+                        badge.className = 'match-comparison-badge correct';
+                        badge.textContent = isPositive ? 'True Pos' : 'True Neg';
+                    } else {
+                        badge.className = 'match-comparison-badge mismatch';
+                        badge.textContent = isPositive ? 'False Pos' : 'False Neg';
+                    }
+                    right.appendChild(badge);
+                }
+
+                const probVal = document.createElement('span');
+                probVal.className = 'pred-prob-val';
+                probVal.textContent = (pred.probability * 100).toFixed(2) + '%';
+                right.appendChild(probVal);
+                meta.appendChild(right);
+                
+                card.appendChild(meta);
+
+                // Progress Bar representation
+                const progressContainer = document.createElement('div');
+                progressContainer.className = 'pred-bar-container';
+                
+                const fill = document.createElement('div');
+                fill.className = 'pred-bar-fill';
+                // Trigger transition after render
+                setTimeout(() => {
+                    fill.style.width = (pred.probability * 100) + '%';
+                }, 50);
+                
+                progressContainer.appendChild(fill);
+                card.appendChild(progressContainer);
+
+                listContainer.appendChild(card);
+            });
+        }
+
+        // Filter predicted pathologies in panel list
+        function filterPredictions() {
+            const query = document.getElementById('pred-search').value.toLowerCase();
+            if (!query) {
+                renderPredictionsList(predictionResults);
+                return;
+            }
+
+            const filtered = predictionResults.filter(p => 
+                p.fullname.toLowerCase().includes(query) || 
+                p.label.toLowerCase().includes(query)
+            );
+            
+            renderPredictionsList(filtered);
+        }
+
+        // Helper to update visual dials on the dashboard
+        function updateDial(id, value) {
+            let valFloat = 0.0;
+            if (typeof value === "string") {
+                valFloat = parseFloat(value.replace('%', ''));
+                if (value.includes('%')) {
+                    valFloat = valFloat / 100.0;
+                }
+            } else {
+                valFloat = parseFloat(value);
+                if (valFloat > 1.0) {
+                    valFloat = valFloat / 100.0;
+                }
+            }
+            valFloat = Math.min(Math.max(valFloat, 0.0), 1.0);
+            
+            const circle = document.getElementById(`dial-${id}`);
+            const text = document.getElementById(`dial-${id}-text`);
+            
+            if (circle) {
+                const offset = 251.2 * (1 - valFloat);
+                circle.style.strokeDashoffset = offset;
+            }
+            if (text) {
+                text.textContent = (valFloat * 100).toFixed(1) + '%';
+            }
+        }
+
+        // Fetch Stats from API (and update hardcoded ones)
+        async function fetchStats() {
+            try {
+                const response = await fetch('/api/stats');
+                if (!response.ok) return;
+                const stats = await response.json();
+                
+                if (stats["Hamming Loss"]) document.getElementById('stat-hl').textContent = stats["Hamming Loss"];
+                if (stats["Mean Accuracy"]) {
+                    document.getElementById('stat-acc').textContent = (parseFloat(stats["Mean Accuracy"]) * 100).toFixed(2) + '%';
+                    updateDial('acc', stats["Mean Accuracy"]);
+                }
+                if (stats["Global F1-Macro"]) {
+                    updateDial('f1', stats["Global F1-Macro"]);
+                }
+                if (stats["Mean Sensitivity"]) {
+                    updateDial('sens', stats["Mean Sensitivity"]);
+                }
+                if (stats["Mean Specificity"]) {
+                    document.getElementById('stat-spec').textContent = (parseFloat(stats["Mean Specificity"]) * 100).toFixed(2) + '%';
+                    updateDial('spec', stats["Mean Specificity"]);
+                }
+                
+                // Support both Mean AUC-ROC and original key
+                const aucVal = stats["Mean AUC-ROC"] || stats["Disease Risk AUC-ROC"];
+                if (aucVal) {
+                    document.getElementById('stat-auc').textContent = aucVal;
+                    updateDial('auc', aucVal);
+                    if (stats["Mean AUC-ROC"]) {
+                        document.getElementById('stat-auc-label').textContent = "Mean AUC-ROC";
+                    }
+                }
+            } catch (e) {
+                console.error("Could not fetch validation stats summary: ", e);
+            }
+        }
+
+        // Fetch and render the implementation paper markdown
+        async function loadPaper() {
+            try {
+                const response = await fetch('/implementation_paper.md?t=' + new Date().getTime());
+                if (!response.ok) {
+                    throw new Error(`Server returned status ${response.status}`);
+                }
+                const text = await response.text();
+                
+                // Strip metadata yaml frontmatter if present
+                let cleanText = text;
+                if (text.startsWith('---')) {
+                    const secondIndex = text.indexOf('---', 3);
+                    if (secondIndex !== -1) {
+                        cleanText = text.substring(secondIndex + 3).trim();
+                    }
+                }
+                
+                // Parse markdown via marked.js
+                document.getElementById('paper-content').innerHTML = marked.parse(cleanText);
+            } catch (error) {
+                console.error(error);
+                document.getElementById('paper-content').innerHTML = 
+                    `<p style="text-align: center; padding: 2rem; color: var(--danger);">Failed to load implementation paper. Error: ${error.message}</p>`;
+            }
+        }
+
+        // Fetch and parse the evaluation results text file into the table
+        async function loadResults() {
+            try {
+                const response = await fetch('/static/evaluation_results.txt');
+                if (!response.ok) throw new Error('Evaluation results file not found');
+                const text = await response.text();
+                
+                const lines = text.split('\n');
+                const tbody = document.getElementById('table-body');
+                tbody.innerHTML = ''; // Clear loading
+                
+                let startParsing = false;
+                let parsedRows = [];
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    
+                    if (line.startsWith('Label Name') && line.includes('Accuracy')) {
+                        i++; // Skip the separator dashes line
+                        startParsing = true;
+                        continue;
+                    }
+                    
+                    if (startParsing) {
+                        if (line.startsWith('-----------------') || line === '') {
+                            if (parsedRows.length > 0) break; 
+                            continue;
+                        }
+                        
+                        const parts = line.split('|').map(p => p.trim());
+                        if (parts.length >= 6) {
+                            const name = parts[0];
+                            const acc = parseFloat(parts[1]);
+                            const sens = parseFloat(parts[2]);
+                            const spec = parseFloat(parts[3]);
+                            const f1 = parseFloat(parts[4]);
+                            const auc = parseFloat(parts[5]);
+                            
+                            parsedRows.push({ name, acc, sens, spec, f1, auc });
+                        }
+                    }
+                }
+                
+                // Render parsed rows
+                parsedRows.forEach(row => {
+                    const tr = document.createElement('tr');
+                    
+                    const cellName = document.createElement('td');
+                    cellName.style.fontWeight = '600';
+                    cellName.style.color = 'var(--text-primary)';
+                    cellName.textContent = row.name;
+                    tr.appendChild(cellName);
+                    
+                    const cellAcc = document.createElement('td');
+                    cellAcc.className = 'text-mono highlight-val';
+                    cellAcc.textContent = (row.acc * 100).toFixed(2) + '%';
+                    tr.appendChild(cellAcc);
+                    
+                    const cellSens = document.createElement('td');
+                    cellSens.className = 'text-mono';
+                    if (row.sens > 0) {
+                        cellSens.className += ' highlight-val';
+                        cellSens.textContent = (row.sens * 100).toFixed(2) + '%';
+                    } else {
+                        cellSens.className += ' lowlight-val';
+                        cellSens.textContent = '0.00%';
+                    }
+                    tr.appendChild(cellSens);
+                    
+                    const cellSpec = document.createElement('td');
+                    cellSpec.className = 'text-mono';
+                    cellSpec.textContent = (row.spec * 100).toFixed(2) + '%';
+                    tr.appendChild(cellSpec);
+                    
+                    const cellF1 = document.createElement('td');
+                    cellF1.className = 'text-mono';
+                    if (row.f1 > 0) {
+                        cellF1.className += ' highlight-val';
+                        cellF1.textContent = row.f1.toFixed(4);
+                    } else {
+                        cellF1.className += ' lowlight-val';
+                        cellF1.textContent = '0.0000';
+                    }
+                    tr.appendChild(cellF1);
+                    
+                    const cellAuc = document.createElement('td');
+                    cellAuc.className = 'text-mono';
+                    if (row.auc !== 0.5) {
+                        cellAuc.style.color = 'var(--accent-purple)';
+                        cellAuc.style.fontWeight = '600';
+                        cellAuc.textContent = row.auc.toFixed(4);
+                    } else {
+                        cellAuc.className += ' lowlight-val';
+                        cellAuc.textContent = '0.5000';
+                    }
+                    tr.appendChild(cellAuc);
+                    
+                    tbody.appendChild(tr);
+                });
+                
+                document.getElementById('visible-count').textContent = parsedRows.length;
+                document.getElementById('total-count').textContent = parsedRows.length;
+                
+                // Also update the description of the Accuracy stat card
+                document.getElementById('stat-acc-desc').textContent = "Average across " + parsedRows.length + " diagnostic labels";
+                
+            } catch (error) {
+                console.error(error);
+                document.getElementById('table-body').innerHTML = 
+                    `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--danger);">Failed to parse results. Error: ${error.message}</td></tr>`;
+            }
+        }
+
+        // Table searching
+        function filterTable() {
+            const input = document.getElementById('searchBar');
+            const filter = input.value.toLowerCase();
+            const table = document.getElementById('resultsTable');
+            const trs = table.getElementsByTagName('tr');
+            let count = 0;
+            
+            for (let i = 1; i < trs.length; i++) {
+                const td = trs[i].getElementsByTagName('td')[0];
+                if (td) {
+                    const textValue = td.textContent || td.innerText;
+                    if (textValue.toLowerCase().indexOf(filter) > -1) {
+                        trs[i].style.display = "";
+                        count++;
+                    } else {
+                        trs[i].style.display = "none";
+                    }
+                }
+            }
+            document.getElementById('visible-count').textContent = count;
+        }
+
+        // Table sorting
+        let sortDirection = false;
+        function sortTable(colIndex) {
+            const table = document.getElementById('resultsTable');
+            const tbody = table.getElementsByTagName('tbody')[0];
+            const rows = Array.from(tbody.getElementsByTagName('tr'));
+            
+            sortDirection = !sortDirection;
+            
+            rows.sort((a, b) => {
+                let cellA = a.getElementsByTagName('td')[colIndex].innerText || a.getElementsByTagName('td')[colIndex].textContent;
+                let cellB = b.getElementsByTagName('td')[colIndex].innerText || b.getElementsByTagName('td')[colIndex].textContent;
+                
+                if (colIndex > 0) {
+                    cellA = parseFloat(cellA.replace('%', ''));
+                    cellB = parseFloat(cellB.replace('%', ''));
+                    return sortDirection ? cellA - cellB : cellB - cellA;
+                }
+                
+                return sortDirection ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+            });
+            
+            tbody.innerHTML = '';
+            rows.forEach(row => tbody.appendChild(row));
+        }
+
+        // Initialize content on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            loadExamples();
+            fetchStats();
+            loadPaper();
+            loadResults();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+========================================================
+CNN-TRANSFORMER-LSTM HYBRID MODEL FINAL EVALUATION REPORT
+========================================================
+
+Total Samples evaluated: 531
+Hamming Loss: 0.05556
+Global F1-Macro: 0.93974
+Global F1-Micro: 0.93973
+Mean Accuracy: 0.94444
+Mean Sensitivity: 0.93878
+Mean Specificity: 0.94930
+Mean AUC-ROC: 0.98030
+
+PER-CLASS EVALUATION DETAILS:
+---------------------------------------------------------------------------------
+Label Name      | Accuracy   | Sensitivity  | Specificity  | F1-Score   | AUC-ROC   
+---------------------------------------------------------------------------------
+Disease_Risk    | 0.9454     | 0.9388       | 0.9510       | 0.9407     | 0.9803    
+DR              | 0.9435     | 0.9388       | 0.9476       | 0.9388     | 0.9803    
+---------------------------------------------------------------------------------

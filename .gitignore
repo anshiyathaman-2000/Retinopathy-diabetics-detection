@@ -1,0 +1,25 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Large dataset directories
+archive 2/
+
+# Large PDF files
+CureusJournals_1966620260715-26794-4uxbcn.pdf
+*.pdf
+
+# Model weights
+*.pth
+
+# Temporary runs/outputs
+static/temp_runs/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
