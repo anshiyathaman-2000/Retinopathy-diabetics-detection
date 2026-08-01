@@ -208,17 +208,19 @@ st.markdown("<p class='subtitle'>Joint Ophthalmic Multi-Label Retinal Disease Di
 tab1, tab2, tab3 = st.tabs(["👁️ Diagnostic Pipeline", "📊 Performance Metrics", "📄 Project Documentation"])
 
 with tab1:
-    st.markdown("### Step 1: Input Fundus Image")
+    st.markdown("### Step 1: Input Fundus Image(s)")
     input_source = st.radio("Choose Input Source", ["Upload Custom Image", "Select Validation Dataset Sample"], horizontal=True)
     
-    image_to_process = None
-    ground_truth = None
+    images_to_process = []
     
     if input_source == "Upload Custom Image":
-        uploaded_file = st.file_uploader("Upload fundus image (JPG, PNG, JPEG)", type=["png", "jpg", "jpeg"])
-        if uploaded_file is not None:
-            file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
-            image_to_process = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        uploaded_files = st.file_uploader("Upload fundus image(s) (JPG, PNG, JPEG)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+        if uploaded_files:
+            for uploaded_file in uploaded_files:
+                file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+                img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+                if img is not None:
+                    images_to_process.append({"name": uploaded_file.name, "img": img, "gt": None})
     else:
         # Load sample examples dynamically
         examples = []
@@ -241,19 +243,39 @@ with tab1:
                     examples.append({"name": img_name, "path": img_path, "gt": gt_dict})
         
         if len(examples) > 0:
-            example_names = [x["name"] for x in examples]
-            selected_example_name = st.selectbox("Select Sample Image", example_names)
-            selected_example = next(x for x in examples if x["name"] == selected_example_name)
-            image_to_process = cv2.imread(selected_example["path"])
-            ground_truth = selected_example["gt"]
+            selected_example_names = st.multiselect("Select Sample Image(s)", [x["name"] for x in examples], default=[examples[0]["name"]] if examples else [])
+            for name in selected_example_names:
+                example = next(x for x in examples if x["name"] == name)
+                img = cv2.imread(example["path"])
+                if img is not None:
+                    images_to_process.append({"name": example["name"], "img": img, "gt": example["gt"]})
         else:
             st.info("No local validation samples found. Please upload a custom image.")
 
-    if image_to_process is not None:
-        st.markdown("### Step 2: Fundus Enhancement & Preprocessing")
+    # Clear stale diagnosis results if the uploaded/selected files list or model changes
+    current_image_names = [x["name"] for x in images_to_process]
+    if "prev_image_names" not in st.session_state:
+        st.session_state["prev_image_names"] = current_image_names
+    elif st.session_state["prev_image_names"] != current_image_names:
+        st.session_state["prev_image_names"] = current_image_names
+        if "diagnosis_results" in st.session_state:
+            del st.session_state["diagnosis_results"]
+            
+    if "prev_selected_model" not in st.session_state:
+        st.session_state["prev_selected_model"] = selected_model_id
+    elif st.session_state["prev_selected_model"] != selected_model_id:
+        st.session_state["prev_selected_model"] = selected_model_id
+        if "diagnosis_results" in st.session_state:
+            del st.session_state["diagnosis_results"]
+
+    if len(images_to_process) > 0:
+        st.markdown("### Step 2: Select Active Image to Preprocess & Inspect")
+        active_image_names = [x["name"] for x in images_to_process]
+        selected_active_name = st.selectbox("Select image for detailed preview and report", active_image_names)
+        active_item = next(x for x in images_to_process if x["name"] == selected_active_name)
         
         # Preprocessing Steps
-        resized = cv2.resize(image_to_process, (256, 256), interpolation=cv2.INTER_AREA)
+        resized = cv2.resize(active_item["img"], (256, 256), interpolation=cv2.INTER_AREA)
         clahe_img = apply_clahe(resized)
         msr_img = multi_scale_retinex(clahe_img)
         
@@ -267,44 +289,89 @@ with tab1:
             st.image(cv2.cvtColor(msr_img, cv2.COLOR_BGR2RGB), caption="Multi-Scale Retinex (MSR) Output", use_column_width=True)
             
         # Diagnosis Button
-        if st.button("👁️ Run Disease Diagnosis", type="primary"):
+        if st.button("👁️ Run Disease Diagnosis for All", type="primary"):
             with st.spinner("Analyzing fundus scans..."):
-                # Prepare tensor
-                img_rgb = cv2.cvtColor(msr_img, cv2.COLOR_BGR2RGB)
-                img_normalized = img_rgb.astype(np.float32) / 255.0
-                mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-                std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-                img_normalized = (img_normalized - mean) / std
-                img_tensor = img_normalized.transpose(2, 0, 1)
-                img_tensor = torch.from_numpy(img_tensor).unsqueeze(0)
-                
-                # Inference
-                with torch.no_grad():
-                    logits = model(img_tensor)
-                    probs = torch.sigmoid(logits).squeeze(0).cpu().numpy()
+                all_results = []
+                for item in images_to_process:
+                    img_to_run = item["img"]
+                    resized_run = cv2.resize(img_to_run, (256, 256), interpolation=cv2.INTER_AREA)
+                    clahe_run = apply_clahe(resized_run)
+                    msr_run = multi_scale_retinex(clahe_run)
                     
-                # Format predictions
-                predictions = []
-                for i, col in enumerate(label_cols):
-                    prob = float(probs[i])
-                    pred_class = 1 if prob >= 0.5 else 0
-                    gt_val = ground_truth.get(col) if ground_truth else None
-                    predictions.append({
-                        "label": col,
-                        "fullname": DISEASE_MAP.get(col, col),
-                        "probability": prob,
-                        "prediction": pred_class,
-                        "ground_truth": gt_val
+                    img_rgb = cv2.cvtColor(msr_run, cv2.COLOR_BGR2RGB)
+                    img_normalized = img_rgb.astype(np.float32) / 255.0
+                    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+                    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+                    img_normalized = (img_normalized - mean) / std
+                    img_tensor = img_normalized.transpose(2, 0, 1)
+                    img_tensor = torch.from_numpy(img_tensor).unsqueeze(0)
+                    
+                    with torch.no_grad():
+                        logits = model(img_tensor)
+                        probs = torch.sigmoid(logits).squeeze(0).cpu().numpy()
+                        
+                    # Format predictions
+                    predictions = []
+                    for i, col in enumerate(label_cols):
+                        prob = float(probs[i])
+                        pred_class = 1 if prob >= 0.5 else 0
+                        gt_val = item["gt"].get(col) if item["gt"] else None
+                        predictions.append({
+                            "label": col,
+                            "fullname": DISEASE_MAP.get(col, col),
+                            "probability": prob,
+                            "prediction": pred_class,
+                            "ground_truth": gt_val
+                        })
+                    
+                    all_results.append({
+                        "name": item["name"],
+                        "predictions": predictions
                     })
+                st.session_state["diagnosis_results"] = all_results
+
+        # Render Diagnosis Results if present
+        if "diagnosis_results" in st.session_state:
+            st.markdown("---")
+            st.markdown("### Batch Diagnosis Summary")
+            
+            summary_rows = []
+            for res in st.session_state["diagnosis_results"]:
+                name = res["name"]
+                preds = res["predictions"]
                 
-                # Split Disease Risk and specific classes
-                disease_risk_pred = [p for p in predictions if p["label"] == "Disease_Risk"][0]
-                other_preds = [p for p in predictions if p["label"] != "Disease_Risk"]
+                disease_risk_pred = [p for p in preds if p["label"] == "Disease_Risk"][0]
+                other_preds = [p for p in preds if p["label"] != "Disease_Risk"]
+                
+                risk_prob = disease_risk_pred["probability"]
+                risk_status = "🔴 High Risk" if risk_prob >= 0.5 else "🟢 Low/Normal Risk"
+                
+                active_diseases = [p["fullname"] for p in other_preds if p["prediction"] == 1]
+                pathologies_str = ", ".join(active_diseases) if active_diseases else "None"
+                
+                gt_risk_str = ""
+                if disease_risk_pred["ground_truth"] is not None:
+                    gt_risk_str = "🔴 High" if disease_risk_pred["ground_truth"] == 1 else "🟢 Low"
+                    
+                summary_rows.append({
+                    "Image Name": name,
+                    "Disease Risk Score": f"{risk_prob:.2%}",
+                    "Risk Classification": risk_status,
+                    "Detected Pathologies": pathologies_str,
+                    "Ground Truth Risk": gt_risk_str if gt_risk_str else "N/A"
+                })
+                
+            st.dataframe(pd.DataFrame(summary_rows), use_container_width=True)
+            
+            # Show Detailed Report for selected active image
+            active_res = next((r for r in st.session_state["diagnosis_results"] if r["name"] == selected_active_name), None)
+            if active_res:
+                st.markdown(f"#### Detailed Clinical Report: `{selected_active_name}`")
+                preds = active_res["predictions"]
+                
+                disease_risk_pred = [p for p in preds if p["label"] == "Disease_Risk"][0]
+                other_preds = [p for p in preds if p["label"] != "Disease_Risk"]
                 other_preds.sort(key=lambda x: x["probability"], reverse=True)
-                
-                # Display Results
-                st.markdown("---")
-                st.markdown("### Diagnosis Summary")
                 
                 risk_prob = disease_risk_pred["probability"]
                 risk_color = "#ef4444" if risk_prob >= 0.5 else "#10b981"
@@ -323,15 +390,11 @@ with tab1:
                 with r_col2:
                     active_diseases = [p["fullname"] for p in other_preds if p["prediction"] == 1]
                     if len(active_diseases) > 0:
-                        st.markdown(f"#### Detected Pathologies:")
                         for d in active_diseases:
                             st.error(f"⚠️ **{d}** detected")
                     else:
                         st.success("✅ No specific pathologies detected with threshold >= 0.50")
-                
-                # Details Table
-                st.markdown("#### Full Clinical Classification Report")
-                
+                        
                 report_data = []
                 for p in [disease_risk_pred] + other_preds:
                     status = "🔴 Positive" if p["prediction"] == 1 else "🟢 Negative"
