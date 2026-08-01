@@ -27,10 +27,16 @@ app.add_middleware(
 )
 
 # Paths
-BASE_DIR = "/Users/apple/Library/Mobile Documents/com~apple~CloudDocs/paper"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, "Evaluation_Set/RFMiD_Validation_Labels.csv")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-TEMP_RUNS_DIR = os.path.join(STATIC_DIR, "temp_runs")
+
+# Vercel compatibility: use /tmp for temporary file writes if running in serverless Vercel environment
+IS_VERCEL = "VERCEL" in os.environ
+if IS_VERCEL:
+    TEMP_RUNS_DIR = "/tmp"
+else:
+    TEMP_RUNS_DIR = os.path.join(STATIC_DIR, "temp_runs")
 
 # Ensure directories exist
 os.makedirs(TEMP_RUNS_DIR, exist_ok=True)
@@ -544,6 +550,9 @@ def get_code(filename: str):
     raise HTTPException(status_code=404, detail="File not found")
 
 # Mount static and validation directories
+# If on Vercel, mount /static/temp_runs first to serve the temporary files from /tmp
+if IS_VERCEL:
+    app.mount("/static/temp_runs", StaticFiles(directory="/tmp"), name="temp_runs")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 app.mount("/validation_images", StaticFiles(directory=VALIDATION_IMG_DIR), name="validation_images")
 
