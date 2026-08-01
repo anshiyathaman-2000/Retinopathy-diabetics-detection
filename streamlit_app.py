@@ -437,28 +437,33 @@ with tab2:
     if os.path.exists(stats_path):
         with open(stats_path, "r") as f:
             stats_content = f.read()
-            st.text_area("Evaluation Report", stats_content, height=250)
+            st.markdown("#### Clinical Evaluation Metrics Report")
+            # Using st.code to display the full report cleanly without scrollbars and editable input box
+            st.code(stats_content, language="text")
     else:
         st.warning("No evaluation metrics text file found for this model.")
         
     # Visual metrics curves
     st.markdown("### Visual Performance Curves")
     
-    col_img1, col_img2 = st.columns(2)
-    with col_img1:
-        loss_fn = f"loss_plot_{m_name}.png" if os.path.exists(os.path.join(STATIC_DIR, f"loss_plot_{m_name}.png")) else "loss_plot.png"
-        loss_path = os.path.join(STATIC_DIR, loss_fn)
-        if os.path.exists(loss_path):
-            st.image(loss_path, caption=f"Training & Validation Loss Curves ({model_options[selected_model_id]})", use_column_width=True)
-        else:
-            st.info("Loss plot not found.")
-            
-    with col_img2:
-        confusion_path = os.path.join(STATIC_DIR, "confusion_matrix.png")
-        if os.path.exists(confusion_path):
-            st.image(confusion_path, caption="Confusion Matrix (Validation)", use_column_width=True)
-        else:
-            st.info("Confusion matrix not found.")
+    loss_fn = f"loss_plot_{m_name}.png" if os.path.exists(os.path.join(STATIC_DIR, f"loss_plot_{m_name}.png")) else "loss_plot.png"
+    loss_path = os.path.join(STATIC_DIR, loss_fn)
+    confusion_path = os.path.join(STATIC_DIR, "confusion_matrix.png")
+    
+    # We display them vertically in full width to make them much larger and easily readable
+    if os.path.exists(loss_path):
+        st.markdown("#### 1. Training & Validation Loss Curves")
+        st.image(loss_path, caption=f"Loss Curves ({model_options[selected_model_id]})", use_column_width=True)
+    else:
+        st.info("Loss plot not found.")
+        
+    st.markdown("---")
+        
+    if os.path.exists(confusion_path):
+        st.markdown("#### 2. Confusion Matrix")
+        st.image(confusion_path, caption=f"Validation Confusion Matrix ({model_options[selected_model_id]})", use_column_width=True)
+    else:
+        st.info("Confusion matrix not found.")
 
 with tab3:
     st.markdown("### Implementation Methodology")
