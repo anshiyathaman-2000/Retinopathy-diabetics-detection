@@ -242,6 +242,19 @@ with tab1:
                     gt_dict = {col: int(row[col]) for col in label_cols}
                     examples.append({"name": img_name, "path": img_path, "gt": gt_dict})
         
+        # Fallback to repository sample_images if no dataset directories exist (e.g. on Streamlit Community Cloud)
+        if len(examples) == 0:
+            repo_sample_dir = os.path.join(BASE_DIR, "sample_images")
+            if os.path.exists(repo_sample_dir):
+                dr_dir = os.path.join(repo_sample_dir, "DR")
+                nodr_dir = os.path.join(repo_sample_dir, "No_DR")
+                dr_files = sorted([f for f in os.listdir(dr_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]) if os.path.exists(dr_dir) else []
+                nodr_files = sorted([f for f in os.listdir(nodr_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]) if os.path.exists(nodr_dir) else []
+                for f in dr_files:
+                    examples.append({"name": f"DR/{f}", "path": os.path.join(dr_dir, f), "gt": {"Disease_Risk": 1, "DR": 1}})
+                for f in nodr_files:
+                    examples.append({"name": f"No_DR/{f}", "path": os.path.join(nodr_dir, f), "gt": {"Disease_Risk": 0, "DR": 0}})
+        
         if len(examples) > 0:
             selected_example_names = st.multiselect("Select Sample Image(s)", [x["name"] for x in examples], default=[examples[0]["name"]] if examples else [])
             for name in selected_example_names:
