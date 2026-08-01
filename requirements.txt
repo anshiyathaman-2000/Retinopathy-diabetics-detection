@@ -1,8 +1,9 @@
---extra-index-url https://download.pytorch.org/whl/cpu
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
 fastapi
 python-multipart
 numpy
 pandas
 opencv-python-headless
-torch==2.2.2+cpu
-torchvision==0.17.2+cpu
+torch
+torchvision

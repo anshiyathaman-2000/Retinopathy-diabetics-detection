@@ -1,0 +1,10 @@
+# Exclude datasets and training files from Vercel function bundle
+archive 2/
+Evaluation_Set/
+CureusJournals_1966620260715-26794-4uxbcn.pdf
+dataset.py
+train_eval.py
+static/temp_runs/
+preprocessed_cache/
+.git/
+.DS_Store
