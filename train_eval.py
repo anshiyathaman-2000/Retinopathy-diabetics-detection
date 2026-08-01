@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score, hamming_loss, roc_auc_score
 
 from dataset import RFMiDDataset, DiabeticRetinopathyDataset
-from model import HybridCNNTransformerLSTM
+from model import get_model
 
 
 def calculate_detailed_metrics(y_true, y_pred, y_prob):
@@ -150,7 +150,7 @@ def evaluate(model, loader, criterion, device):
     
     return metrics, all_targets, all_preds
 
-def main(epochs=15, batch_size=8, lr=1e-4, lr_backbone=1e-5, dataset_name="archive2"):
+def main(model_name="hybrid", epochs=15, batch_size=8, lr=1e-4, lr_backbone=1e-5, dataset_name="archive2"):
     static_dir = "/Users/apple/Library/Mobile Documents/com~apple~CloudDocs/paper/static"
     os.makedirs(static_dir, exist_ok=True)
     
@@ -213,8 +213,8 @@ def main(epochs=15, batch_size=8, lr=1e-4, lr_backbone=1e-5, dataset_name="archi
         pos_counts = np.sum(train_labels, axis=0)
         neg_counts = len(train_labels) - pos_counts
     
-    # Initialize hybrid model
-    model = HybridCNNTransformerLSTM(num_classes=num_classes)
+    # Initialize selected model
+    model = get_model(model_name, num_classes=num_classes)
     model = model.to(device)
     
     pos_weight = []
@@ -239,7 +239,8 @@ def main(epochs=15, batch_size=8, lr=1e-4, lr_backbone=1e-5, dataset_name="archi
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue
-        if "cnn_backbone" in name:
+        is_backbone = any(term in name for term in ["cnn_backbone", "backbone", "resnet_backbone", "inception_backbone", "patch_proj"])
+        if is_backbone:
             backbone_params.append(param)
         else:
             head_params.append(param)
@@ -295,16 +296,24 @@ def main(epochs=15, batch_size=8, lr=1e-4, lr_backbone=1e-5, dataset_name="archi
         if val_metrics["f1_macro"] > best_f1:
             best_f1 = val_metrics["f1_macro"]
             best_epoch = epoch
-            torch.save(model.state_dict(), os.path.join(static_dir, "best_model.pth"))
+            checkpoint_name = f"best_model_{model_name}.pth"
+            torch.save(model.state_dict(), os.path.join(static_dir, checkpoint_name))
+            if model_name == "hybrid":
+                torch.save(model.state_dict(), os.path.join(static_dir, "best_model.pth"))
             
     total_time = time.time() - start_time
     print(f"\nTraining Complete! Best Val F1-Macro: {best_f1:.4f} at Epoch {best_epoch}")
     print(f"Total time elapsed: {total_time/60:.2f} minutes")
     
     # Load the best model for final evaluation
-    if os.path.exists(os.path.join(static_dir, "best_model.pth")):
-        model.load_state_dict(torch.load(os.path.join(static_dir, "best_model.pth")))
-        print("Loaded best model checkpoint for final evaluation.")
+    checkpoint_name = f"best_model_{model_name}.pth"
+    checkpoint_path = os.path.join(static_dir, checkpoint_name)
+    if not os.path.exists(checkpoint_path) and model_name == "hybrid":
+        checkpoint_path = os.path.join(static_dir, "best_model.pth")
+        
+    if os.path.exists(checkpoint_path):
+        model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+        print(f"Loaded best model checkpoint ({os.path.basename(checkpoint_path)}) for final evaluation.")
         
     final_metrics, y_true, y_pred = evaluate(model, val_loader, criterion, device)
     
@@ -314,18 +323,21 @@ def main(epochs=15, batch_size=8, lr=1e-4, lr_backbone=1e-5, dataset_name="archi
     plt.plot(range(1, epochs + 1), history["val_loss"], label="Val Loss", marker='o')
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
-    plt.title("CNN-Transformer-LSTM Training and Validation Loss")
+    plt.title(f"{model_name.upper()} Training and Validation Loss")
     plt.legend()
     plt.grid(True)
-    plt.savefig(os.path.join(static_dir, "loss_plot.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(static_dir, f"loss_plot_{model_name}.png"), bbox_inches='tight')
+    if model_name == "hybrid":
+        plt.savefig(os.path.join(static_dir, "loss_plot.png"), bbox_inches='tight')
     plt.close()
-    print("Saved loss curve plot to static/loss_plot.png")
+    print(f"Saved loss curve plot to static/loss_plot_{model_name}.png")
     
     # Generate final evaluation report and write to file
-    report_path = os.path.join(static_dir, "evaluation_results.txt")
+    import shutil
+    report_path = os.path.join(static_dir, f"evaluation_results_{model_name}.txt")
     with open(report_path, "w") as f:
         f.write("========================================================\n")
-        f.write("CNN-TRANSFORMER-LSTM HYBRID MODEL FINAL EVALUATION REPORT\n")
+        f.write(f"{model_name.upper()} MODEL FINAL EVALUATION REPORT\n")
         f.write("========================================================\n\n")
         f.write(f"Total Samples evaluated: {num_eval_samples}\n")
         f.write(f"Hamming Loss: {final_metrics['hamming_loss']:.5f}\n")
@@ -353,9 +365,12 @@ def main(epochs=15, batch_size=8, lr=1e-4, lr_backbone=1e-5, dataset_name="archi
         f.write("---------------------------------------------------------------------------------\n")
         
     print(f"Saved evaluation results report to: {report_path}")
+    if model_name == "hybrid":
+        shutil.copy(report_path, os.path.join(static_dir, "evaluation_results.txt"))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train CNN-Transformer-LSTM Retinal Classification Model")
+    parser.add_argument("--model", type=str, default="hybrid", choices=["hybrid", "resnet50", "vit", "cnn_transformer", "cnn_lstm", "cnn_inception"], help="Model architecture to train")
     parser.add_argument("--epochs", type=int, default=15, help="Number of training epochs")
     parser.add_argument("--batch-size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate for newly initialized layers")
@@ -363,4 +378,4 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, default="archive2", choices=["archive2", "rfmid"], help="Dataset to train on")
     args = parser.parse_args()
     
-    main(epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, lr_backbone=args.lr_backbone, dataset_name=args.dataset)
+    main(model_name=args.model, epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, lr_backbone=args.lr_backbone, dataset_name=args.dataset)

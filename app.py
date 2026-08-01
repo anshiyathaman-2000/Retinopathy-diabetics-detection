@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from typing import Optional
 
-from model import HybridCNNTransformerLSTM
+from model import get_model
 from preprocessing import apply_clahe, multi_scale_retinex
 
 # Create FastAPI app
@@ -32,7 +32,6 @@ CSV_PATH = os.path.join(BASE_DIR, "Evaluation_Set/RFMiD_Validation_Labels.csv")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 TEMP_RUNS_DIR = os.path.join(STATIC_DIR, "temp_runs")
 
-
 # Ensure directories exist
 os.makedirs(TEMP_RUNS_DIR, exist_ok=True)
 
@@ -48,28 +47,41 @@ else:
     print("FastAPI using CPU")
 
 # Dynamic detection of checkpoint classes and configuration mapping
-model_path = os.path.join(STATIC_DIR, "best_model.pth")
+checkpoint_found = False
 is_archive2 = False
 label_cols = ["Disease_Risk"] + [f"Class_{i}" for i in range(1, 46)] # default fallback
 
-if os.path.exists(model_path):
-    try:
-        # Load CPU version to inspect classifier shape
-        checkpoint = torch.load(model_path, map_location="cpu")
-        if "classifier.bias" in checkpoint:
-            ckpt_classes = checkpoint["classifier.bias"].shape[0]
+for weight_fn in ["best_model_hybrid.pth", "best_model.pth", "best_model_resnet50.pth", "best_model_vit.pth", "best_model_cnn_transformer.pth", "best_model_cnn_lstm.pth", "best_model_cnn_inception.pth"]:
+    model_path = os.path.join(STATIC_DIR, weight_fn)
+    if os.path.exists(model_path):
+        try:
+            checkpoint = torch.load(model_path, map_location="cpu")
+            if "classifier.bias" in checkpoint:
+                ckpt_classes = checkpoint["classifier.bias"].shape[0]
+            elif "fc.1.bias" in checkpoint:
+                ckpt_classes = checkpoint["fc.1.bias"].shape[0]
+            else:
+                bias_keys = [k for k in checkpoint.keys() if "bias" in k and ("classifier" in k or "fc" in k)]
+                if len(bias_keys) > 0:
+                    ckpt_classes = checkpoint[bias_keys[0]].shape[0]
+                else:
+                    continue
+                    
             if ckpt_classes == 2:
                 is_archive2 = True
                 label_cols = ["Disease_Risk", "DR"]
-                print("FastAPI: Detected model checkpoint trained on archive 2 (2 classes).")
+                print(f"FastAPI: Detected checkpoint '{weight_fn}' trained on archive 2 (2 classes).")
             else:
-                print(f"FastAPI: Detected model checkpoint with {ckpt_classes} classes.")
+                print(f"FastAPI: Detected checkpoint '{weight_fn}' with {ckpt_classes} classes.")
                 if os.path.exists(CSV_PATH):
                     df_labels = pd.read_csv(CSV_PATH)
                     label_cols = df_labels.columns[1:].tolist()
-    except Exception as e:
-        print(f"FastAPI: Error inspecting checkpoint: {e}")
-else:
+            checkpoint_found = True
+            break
+        except Exception as e:
+            print(f"FastAPI: Error inspecting checkpoint '{weight_fn}': {e}")
+
+if not checkpoint_found:
     # Fallback: check if archive 2 dataset exists
     archive2_dir = os.path.join(BASE_DIR, "archive 2/retino")
     if os.path.exists(archive2_dir):
@@ -137,18 +149,62 @@ DISEASE_MAP = {
     "CL": "Collateral Vessels"
 }
 
-# Initialize and load model weights
-model = HybridCNNTransformerLSTM(num_classes=len(label_cols))
-if os.path.exists(model_path):
-    try:
-        model.load_state_dict(torch.load(model_path, map_location=device))
-        print("Successfully loaded model weights.")
-    except Exception as e:
-        print(f"Error loading model weights: {e}. Starting with uninitialized weights.")
-else:
-    print(f"Warning: Model checkpoint not found at {model_path}. Please train first.")
-model.to(device)
-model.eval()
+# Model Manager for loading models on-demand to save memory
+class ModelManager:
+    def __init__(self, device, static_dir, label_cols):
+        self.device = device
+        self.static_dir = static_dir
+        self.label_cols = label_cols
+        self.active_model_name = None
+        self.active_model = None
+        
+    def get_model_instance(self, model_name: str):
+        model_name = model_name.lower().strip()
+        
+        # Return currently loaded model if matches
+        if self.active_model_name == model_name and self.active_model is not None:
+            return self.active_model, None
+            
+        print(f"FastAPI: Dynamic switch to model: '{model_name}'...")
+        
+        # Instantiate architecture
+        try:
+            model = get_model(model_name, num_classes=len(self.label_cols))
+        except Exception as e:
+            raise ValueError(f"Failed to instantiate model architecture for '{model_name}': {e}")
+            
+        # Determine weight file path
+        weight_filename = f"best_model_{model_name}.pth"
+        weight_path = os.path.join(self.static_dir, weight_filename)
+        
+        # Fallback for hybrid model checkpoint
+        if model_name == "hybrid" and not os.path.exists(weight_path):
+            legacy_path = os.path.join(self.static_dir, "best_model.pth")
+            if os.path.exists(legacy_path):
+                weight_path = legacy_path
+                
+        warning_msg = None
+        if os.path.exists(weight_path):
+            try:
+                model.load_state_dict(torch.load(weight_path, map_location=self.device))
+                print(f"FastAPI: Loaded weights for '{model_name}' successfully from {os.path.basename(weight_path)}")
+            except Exception as e:
+                warning_msg = f"Failed to load weights for '{model_name}': {e}. Using initialized weights."
+                print(f"FastAPI: {warning_msg}")
+        else:
+            warning_msg = f"Checkpoint not found for '{model_name}' at {weight_path}. Running with initialized weights."
+            print(f"FastAPI: {warning_msg}")
+            
+        model.to(self.device)
+        model.eval()
+        
+        self.active_model = model
+        self.active_model_name = model_name
+        
+        return model, warning_msg
+
+# Initialize Model Manager
+model_manager = ModelManager(device=device, static_dir=STATIC_DIR, label_cols=label_cols)
 
 # Helper for processing and saving intermediate states
 def process_and_save_steps(img_path: str, run_id: str):
@@ -217,35 +273,26 @@ def get_examples():
             })
         return examples
 
-        
     if not os.path.exists(CSV_PATH):
         return []
     
     # Read the labels file
     df = pd.read_csv(CSV_PATH)
     
-    # Pick a set of interesting examples that have at least one active disease
-    # We want to represent multiple active categories (DR, ARMD, MH, ODC, etc.)
-    # Disease_Risk is column 2 (index 1)
     examples = []
-    
-    # Sort or select rows with various diseases
-    # Let's check some rows that have DR=1, ARMD=1, MH=1, ODC=1, and some with no disease (Disease_Risk=0)
     for idx, row in df.iterrows():
         img_id = int(row['ID'])
         img_name = f"{img_id}.png"
         img_path = os.path.join(VALIDATION_IMG_DIR, img_name)
         
-        # Verify file exists
         if not os.path.exists(img_path):
             continue
             
         active = []
-        for col in label_cols[1:]:  # Skip Disease_Risk for the disease list
+        for col in label_cols[1:]:
             if row[col] == 1:
                 active.append(col)
                 
-        # Group into a clean structure
         examples.append({
             "id": img_id,
             "filename": img_name,
@@ -255,24 +302,71 @@ def get_examples():
             "ground_truth": {col: int(row[col]) for col in label_cols}
         })
         
-        # Limit to 50 interesting samples to avoid overwhelming the frontend
         if len(examples) >= 50:
             break
             
-    # Sort examples so that those with more active diseases appear first
     examples.sort(key=lambda x: len(x["active_diseases"]), reverse=True)
     return examples
+
+@app.get("/api/models")
+def get_models():
+    """
+    Returns metadata about all supported architectures and weight load statuses.
+    """
+    models_info = [
+        {
+            "id": "hybrid",
+            "name": "CNN-Transformer-LSTM (Proposed)",
+            "description": "Fuses ResNet50 (local pathologies), Multi-Head Transformer Encoder (global dependencies), and BiLSTM (sequential scan modeling).",
+            "has_weights": os.path.exists(os.path.join(STATIC_DIR, "best_model_hybrid.pth")) or os.path.exists(os.path.join(STATIC_DIR, "best_model.pth")),
+            "parameters": "25.5M parameters"
+        },
+        {
+            "id": "resnet50",
+            "name": "ResNet50 Baseline",
+            "description": "Standard deep Residual Network backbone, representing a local-only convolutional baseline.",
+            "has_weights": os.path.exists(os.path.join(STATIC_DIR, "best_model_resnet50.pth")),
+            "parameters": "23.6M parameters"
+        },
+        {
+            "id": "vit",
+            "name": "Vision Transformer (ViT) Baseline",
+            "description": "Vision Transformer baseline using custom patch embeddings and standard transformer self-attention layers.",
+            "has_weights": os.path.exists(os.path.join(STATIC_DIR, "best_model_vit.pth")),
+            "parameters": "3.2M parameters"
+        },
+        {
+            "id": "cnn_transformer",
+            "name": "CNN-Transformer Hybrid",
+            "description": "Fuses a ResNet50 backbone with a Transformer Encoder to capture global spatial correlations without LSTM progression.",
+            "has_weights": os.path.exists(os.path.join(STATIC_DIR, "best_model_cnn_transformer.pth")),
+            "parameters": "24.8M parameters"
+        },
+        {
+            "id": "cnn_lstm",
+            "name": "CNN-LSTM Hybrid",
+            "description": "Combines a ResNet50 CNN with a Bidirectional LSTM to capture spatial progression sequences, omitting the Transformer self-attention.",
+            "has_weights": os.path.exists(os.path.join(STATIC_DIR, "best_model_cnn_lstm.pth")),
+            "parameters": "24.3M parameters"
+        },
+        {
+            "id": "cnn_inception",
+            "name": "CNN Dual Backbone (ResNet + Inception)",
+            "description": "Concatenates extracted feature vectors from two pre-trained CNN backbones (ResNet50 + InceptionV3) to maximize spatial representation.",
+            "has_weights": os.path.exists(os.path.join(STATIC_DIR, "best_model_cnn_inception.pth")),
+            "parameters": "45.4M parameters"
+        }
+    ]
+    return models_info
 
 @app.post("/api/predict")
 async def predict(
     image_id: Optional[int] = Form(None),
-    file: Optional[UploadFile] = File(None)
+    file: Optional[UploadFile] = File(None),
+    model_name: Optional[str] = Form("hybrid")
 ):
     """
-    Runs the full diagnosis pipeline:
-    - Preprocessing (original -> CLAHE -> MSR)
-    - Hybrid Model inference
-    - Ground Truth comparisons (if validation image)
+    Runs the full diagnosis pipeline using the selected model.
     """
     run_id = str(uuid.uuid4())
     temp_input_path = None
@@ -334,7 +428,8 @@ async def predict(
         img_tensor = img_normalized.transpose(2, 0, 1)
         img_tensor = torch.from_numpy(img_tensor).unsqueeze(0).to(device)
         
-        # 3. Model Inference
+        # 3. Model Inference (fetch model from manager)
+        model, warning_msg = model_manager.get_model_instance(model_name)
         with torch.no_grad():
             logits = model(img_tensor)
             probs = torch.sigmoid(logits).squeeze(0).cpu().numpy()
@@ -364,6 +459,8 @@ async def predict(
         return {
             "run_id": run_id,
             "image_id": img_id_display,
+            "active_model": model_name,
+            "warning": warning_msg,
             "images": {
                 "original": steps["original"],
                 "clahe": steps["clahe"],
@@ -387,19 +484,23 @@ async def predict(
                 pass
 
 @app.get("/api/stats")
-def get_stats():
+def get_stats(model_name: Optional[str] = "hybrid"):
     """
-    Parses and returns evaluation results from evaluation_results.txt.
+    Parses and returns evaluation results from model-specific evaluation logs.
     """
-    stats_path = os.path.join(STATIC_DIR, "evaluation_results.txt")
+    m_name = model_name.lower().strip()
+    stats_path = os.path.join(STATIC_DIR, f"evaluation_results_{m_name}.txt")
+    if not os.path.exists(stats_path) and m_name == "hybrid":
+        stats_path = os.path.join(STATIC_DIR, "evaluation_results.txt")
+        
     if not os.path.exists(stats_path):
-        return {"error": "Stats not found"}
+        return {"error": f"Stats not found for model: {model_name}"}
         
     try:
         with open(stats_path, "r") as f:
             lines = f.readlines()
             
-        res = {}
+        res = {"model_name": m_name}
         for line in lines:
             line_str = line.strip()
             if ":" in line_str and not line_str.startswith("PER-CLASS"):
@@ -441,7 +542,6 @@ def get_code(filename: str):
         with open(file_path, "r") as f:
             return f.read()
     raise HTTPException(status_code=404, detail="File not found")
-
 
 # Mount static and validation directories
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
