@@ -446,24 +446,54 @@ with tab2:
     # Visual metrics curves
     st.markdown("### Visual Performance Curves")
     
+    # Helper to encode local image to Base64 data URI to force large rendering
+    import base64
+    def get_image_base64(path):
+        with open(path, "rb") as image_file:
+            encoded = base64.b64encode(image_file.read()).decode()
+        return f"data:image/png;base64,{encoded}"
+        
     loss_fn = f"loss_plot_{m_name}.png" if os.path.exists(os.path.join(STATIC_DIR, f"loss_plot_{m_name}.png")) else "loss_plot.png"
     loss_path = os.path.join(STATIC_DIR, loss_fn)
     confusion_path = os.path.join(STATIC_DIR, "confusion_matrix.png")
+    metrics_path = os.path.join(STATIC_DIR, "metrics_plot.png")
     
-    # We display them vertically in full width to make them much larger and easily readable
+    # 1. Loss Curves
     if os.path.exists(loss_path):
         st.markdown("#### 1. Training & Validation Loss Curves")
-        st.image(loss_path, caption=f"Loss Curves ({model_options[selected_model_id]})", use_column_width=True)
+        try:
+            loss_b64 = get_image_base64(loss_path)
+            st.markdown(f'<img src="{loss_b64}" style="width: 100%; max-width: 1200px; height: auto; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); margin-bottom: 25px;" />', unsafe_allow_html=True)
+        except Exception as e:
+            st.image(loss_path, use_column_width=True)
     else:
         st.info("Loss plot not found.")
         
     st.markdown("---")
         
+    # 2. Confusion Matrix
     if os.path.exists(confusion_path):
         st.markdown("#### 2. Confusion Matrix")
-        st.image(confusion_path, caption=f"Validation Confusion Matrix ({model_options[selected_model_id]})", use_column_width=True)
+        try:
+            conf_b64 = get_image_base64(confusion_path)
+            st.markdown(f'<img src="{conf_b64}" style="width: 100%; max-width: 1200px; height: auto; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); margin-bottom: 25px;" />', unsafe_allow_html=True)
+        except Exception as e:
+            st.image(confusion_path, use_column_width=True)
     else:
         st.info("Confusion matrix not found.")
+        
+    st.markdown("---")
+        
+    # 3. Metrics Plot
+    if os.path.exists(metrics_path):
+        st.markdown("#### 3. Evaluation Metrics Plot")
+        try:
+            metrics_b64 = get_image_base64(metrics_path)
+            st.markdown(f'<img src="{metrics_b64}" style="width: 100%; max-width: 1200px; height: auto; border-radius: 12px; border: 1px solid #334155; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); margin-bottom: 25px;" />', unsafe_allow_html=True)
+        except Exception as e:
+            st.image(metrics_path, use_column_width=True)
+    else:
+        st.info("Metrics plot not found.")
 
 with tab3:
     st.markdown("### Implementation Methodology")
