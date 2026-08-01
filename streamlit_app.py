@@ -133,36 +133,69 @@ selected_model_id = st.sidebar.selectbox(
     format_func=lambda x: model_options[x]
 )
 
-# Load Model
-@st.cache_resource
-def get_cached_model(model_name, num_classes):
-    model = get_model(model_name, num_classes=num_classes)
-    weight_filename = f"best_model_{model_name}.pth"
-    weight_path = os.path.join(STATIC_DIR, weight_filename)
-    
-    if model_name == "hybrid" and not os.path.exists(weight_path):
-        legacy_path = os.path.join(STATIC_DIR, "best_model.pth")
-        if os.path.exists(legacy_path):
-            weight_path = legacy_path
-            
-    if os.path.exists(weight_path):
-        model.load_state_dict(torch.load(weight_path, map_location="cpu"))
-    return model, os.path.exists(weight_path), weight_path
+# Load Model Dynamically with Class Count Detection
+def detect_classes_from_checkpoint(checkpoint):
+    if "classifier.bias" in checkpoint:
+        return checkpoint["classifier.bias"].shape[0]
+    elif "fc.1.bias" in checkpoint:
+        return checkpoint["fc.1.bias"].shape[0]
+    else:
+        bias_keys = [k for k in checkpoint.keys() if "bias" in k and ("classifier" in k or "fc" in k)]
+        if len(bias_keys) > 0:
+            return checkpoint[bias_keys[0]].shape[0]
+    return 46  # Default fallback
 
-model, has_weights, weight_path = get_cached_model(selected_model_id, len(label_cols))
-model.eval()
+uploaded_weights = st.sidebar.file_uploader("Upload .pth weights manually", type=["pth"])
 
-if has_weights:
-    st.sidebar.success(f"✓ Active Weights: {os.path.basename(weight_path)}")
+weight_filename = f"best_model_{selected_model_id}.pth"
+weight_path = os.path.join(STATIC_DIR, weight_filename)
+if selected_model_id == "hybrid" and not os.path.exists(weight_path):
+    legacy_path = os.path.join(STATIC_DIR, "best_model.pth")
+    if os.path.exists(legacy_path):
+        weight_path = legacy_path
+
+checkpoint = None
+source_name = ""
+
+if uploaded_weights is not None:
+    try:
+        checkpoint = torch.load(uploaded_weights, map_location="cpu")
+        source_name = f"Uploaded File: {uploaded_weights.name}"
+    except Exception as e:
+        st.sidebar.error(f"Error loading uploaded file: {e}")
+elif os.path.exists(weight_path):
+    try:
+        checkpoint = torch.load(weight_path, map_location="cpu")
+        source_name = os.path.basename(weight_path)
+    except Exception as e:
+        st.sidebar.error(f"Error loading local weights {os.path.basename(weight_path)}: {e}")
+
+if checkpoint is not None:
+    try:
+        detected_classes = detect_classes_from_checkpoint(checkpoint)
+        model = get_model(selected_model_id, num_classes=detected_classes)
+        model.load_state_dict(checkpoint)
+        model.eval()
+        
+        # Override label columns dynamically based on detected model classes
+        if detected_classes == 2:
+            label_cols = ["Disease_Risk", "DR"]
+        else:
+            if os.path.exists(CSV_PATH):
+                df_labels = pd.read_csv(CSV_PATH)
+                label_cols = df_labels.columns[1:].tolist()
+            else:
+                label_cols = ["Disease_Risk"] + [f"Class_{i}" for i in range(1, detected_classes)]
+                
+        st.sidebar.success(f"✓ Loaded weights: {source_name} ({detected_classes} classes)")
+    except Exception as e:
+        st.sidebar.error(f"Failed to load weights: {e}")
+        model = get_model(selected_model_id, num_classes=len(label_cols))
+        model.eval()
 else:
-    st.sidebar.warning("⚠️ Weights not found. Running with initialized weights.")
-    uploaded_weights = st.sidebar.file_uploader("Upload .pth weights manually", type=["pth"])
-    if uploaded_weights is not None:
-        try:
-            model.load_state_dict(torch.load(uploaded_weights, map_location="cpu"))
-            st.sidebar.success("✓ Successfully loaded uploaded weights!")
-        except Exception as e:
-            st.sidebar.error(f"Failed to load weights: {e}")
+    st.sidebar.warning("⚠️ No weights found. Running with initialized weights.")
+    model = get_model(selected_model_id, num_classes=len(label_cols))
+    model.eval()
 
 # Device check
 device_str = "Apple Silicon MPS" if torch.backends.mps.is_available() else ("CUDA GPU" if torch.cuda.is_available() else "CPU")
